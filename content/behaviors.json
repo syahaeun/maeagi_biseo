@@ -1,0 +1,24 @@
+{
+  "physics": {
+    "gravity": 0.85,
+    "terminal_speed": 18.0,
+    "air_friction": 0.97,
+    "jump_speed": 13.0,
+    "jump_horizontal_speed": 2.5,
+    "throw_max_speed": 14.0
+  },
+  "movement": {
+    "walk_speed": 1.5,
+    "climb_speed": 2.0,
+    "ceiling_speed": 1.5,
+    "auto_climb_probability": 0.35,
+    "climb_enabled": true,
+    "throw_enabled": true
+  },
+  "selection": {
+    "weights": {"walk": 4, "idle": 3, "sleep": 2, "hop": 1},
+    "duration_seconds": [2, 6],
+    "wall_duration_seconds": [20, 40],
+    "ceiling_duration_seconds": [6, 12]
+  }
+}

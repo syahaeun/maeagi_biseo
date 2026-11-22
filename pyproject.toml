@@ -1,0 +1,22 @@
+[project]
+name = "maeagi-biseo"
+version = "1.0.0"
+description = "Desktop companion with configurable personas and LLM chat"
+requires-python = ">=3.12"
+dependencies = [
+    "PySide6>=6.6,<7",
+    "Pillow>=10,<13",
+    "wasmtime>=50,<51",
+    "windows-capture>=2.0.1,<3; sys_platform == 'win32'",
+    "numpy>=1.26,<3",
+    "opencv-python>=4.8,<6",
+    "winrt-Windows.Media.Ocr>=3,<5; sys_platform == 'win32'",
+    "winrt-Windows.Graphics.Imaging>=3,<5; sys_platform == 'win32'",
+    "winrt-Windows.Storage>=3,<5; sys_platform == 'win32'",
+    "winrt-Windows.Globalization>=3,<5; sys_platform == 'win32'",
+    "winrt-Windows.Storage.Streams>=3,<5; sys_platform == 'win32'",
+    "rapidocr-onnxruntime>=1.4,<2",
+]
+
+[tool.uv]
+package = false

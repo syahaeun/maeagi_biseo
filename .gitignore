@@ -1,0 +1,48 @@
+# Python environments and bytecode
+.venv*/
+venv/
+env/
+__pycache__/
+*.py[cod]
+
+# Build output and package metadata
+build/
+dist/
+*.spec
+!MaeagiBiseo.spec
+*.egg-info/
+.eggs/
+
+# Test evidence, coverage and tool caches
+Test/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Local agent instructions and settings
+AGENTS.md
+CLAUDE.md
+.agents/
+.codex/
+
+# Local secrets (keep the public setup template)
+.env
+.env.*
+!.env.example
+
+# Temporary files and OS metadata
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,117 @@
+QWidget { font-family: "Malgun Gothic"; font-size: 10pt; color: @text@; }
+QDialog { background: @background@; }
+QAbstractItemView { background: @surface@; alternate-background-color: @background@; color: @text@; selection-background-color: @user@; selection-color: @text@; border: 1px solid @line@; }
+QToolTip { background: @surface@; color: @text@; border: 1px solid @line@; padding: 6px; }
+QToolButton { background: @surface@; color: @text@; border: 1px solid @line@; border-radius: 5px; padding: 5px; }
+QToolButton:hover { background: @hover@; }
+QTabBar::tab { background: @background@; color: @muted@; padding: 8px 12px; border: 1px solid @line@; }
+QTabBar::tab:selected { background: @surface@; color: @text@; }
+QSplitter::handle { background: @line@; }
+QWidget#chat { background: @dm_bg@; }
+QWidget#chatMessages, QScrollArea#chatThreadScroll { background: @dm_panel@; }
+QWidget#chatInbox { background: @dm_inbox@; border: 1px solid @dm_line@; border-radius: 12px; }
+QLabel#chatInboxTitle { font-size: 17pt; font-weight: 700; }
+QListWidget#chatContacts { background: transparent; color: @text@; border: none; outline: none; }
+QListWidget#chatContacts::item { padding: 7px 5px; margin: 2px 0; border: 1px solid transparent; border-radius: 8px; }
+QListWidget#chatContacts::item:hover { background: @dm_hover@; }
+QListWidget#chatContacts::item:selected { background: @dm_selected@; color: @text@; border-color: @dm_line@; }
+QDialog#settingsDialog { background: @background@; }
+QDialog#characterEditor { background: @background@; }
+QWidget#editorPanel { background: @surface@; border: 1px solid @line@; border-radius: 12px; }
+QLabel#editorPreview { background: @background@; border: 1px dashed @line@; border-radius: 10px; }
+QListWidget#editorFrames { background: @background@; color: @text@; border: 1px solid @line@; border-radius: 8px; padding: 4px; }
+QListWidget#editorFrames::item { padding: 6px; border-radius: 6px; }
+QListWidget#editorFrames::item:selected { background: @user@; color: @text@; }
+QPushButton#saveCharacter { background: @accent@; color: @accent_text@; }
+QPushButton#addCharacterFrames { background: @user@; color: @text@; font-weight: 600; }
+QPushButton#addCharacterFrames:hover { background: @hover@; }
+QLabel#editorEmptyFrames { background: @background@; border: 1px dashed @line@; border-radius: 8px; color: @muted@; padding: 12px; }
+QMenu { background: @surface@; color: @text@; border: 1px solid @line@; border-radius: 10px; padding: 6px; }
+QMenu::item { padding: 9px 26px; margin: 2px; border-radius: 6px; background: transparent; }
+QMenu::item:selected { background: @user@; color: @text@; }
+QMenu::item:disabled { color: @muted@; }
+QMenu::separator { height: 1px; background: @line@; margin: 6px 10px; }
+QMenu::indicator { width: 12px; height: 12px; margin-left: 6px; }
+QMenu::indicator:checked { background: @accent@; border: 1px solid @accent@; border-radius: 3px; image: url("@checkmark@"); }
+QMenu::indicator:unchecked { background: @background@; border: 1px solid @line@; border-radius: 3px; }
+QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid @muted@; border-radius: 3px; background: @surface@; }
+QCheckBox::indicator:checked { background: @accent@; border-color: @accent@; image: url("@checkmark@"); }
+QCheckBox::indicator:disabled { border-color: @line@; }
+QWidget#settingsPage { background: @surface@; }
+QCalendarWidget QWidget#qt_calendar_navigationbar { background: @surface@; }
+QCalendarWidget QAbstractItemView { border: 1px solid @line@; selection-background-color: @accent@; selection-color: @accent_text@; }
+QPushButton#farmingMonthTrigger { text-align: left; font-size: 13pt; font-weight: 600; border: none; background: transparent; padding: 7px 9px; }
+QPushButton#farmingMonthTrigger:hover { background: @hover@; }
+QFrame#farmingMonthPicker { background: @surface@; border: 1px solid @line@; border-radius: 12px; }
+QLabel#farmingPickerYear { font-size: 15pt; font-weight: 600; }
+QPushButton#farmingMonthOption { border: 1px solid transparent; background: @background@; padding: 5px; border-radius: 7px; }
+QPushButton#farmingMonthOption:hover { background: @hover@; }
+QPushButton#farmingMonthOption:checked { border-color: @accent@; background: @user@; color: @accent@; font-weight: 600; }
+QLabel#aboutTitle { font-size: 24pt; font-weight: 700; }
+QDialog#settingsDialog QLabel#aboutVersion { font-size: 12pt; font-weight: 700; color: @accent_text@; background: @accent@; border-radius: 12px; padding: 6px 16px; }
+QWidget#aboutHero { background: @hover@; border: 1px solid @line@; border-radius: 14px; }
+QLabel#aboutCreator { font-size: 14pt; font-weight: 600; }
+QPushButton#aboutLink { font-size: 11pt; color: @text@; background: transparent; border: none; text-decoration: underline; }
+QPushButton#aboutLink:hover { background: @surface@; }
+QLabel#aboutSectionTitle { font-size: 11pt; font-weight: 600; }
+QDialog#settingsDialog QLabel { background: transparent; }
+QLabel#settingsHeading { font-size: 19pt; font-weight: 600; background: transparent; }
+QLabel#settingsSubtitle { color: @muted@; background: transparent; }
+QLabel#captureHeading { font-size: 12pt; font-weight: 600; }
+QWidget#captureCard { border: 1px solid @line@; border-radius: 10px; }
+QWidget#settingsCard { background: @surface@; border: 1px solid @line@; border-radius: 12px; }
+QWidget#settingsColumns { background: @background@; }
+QDialog#settingsDialog QLabel#settingsCharacterPreview { background: @hover@; border: 1px solid @line@; border-radius: 10px; }
+QListWidget#settingsNavigation { background: @rail@; color: @rail_text@; border: 1px solid @line@; border-radius: 12px; outline: none; padding: 10px 6px; }
+QListWidget#settingsNavigation::item { padding: 13px 9px; margin-bottom: 5px; border-radius: 8px; }
+QListWidget#settingsNavigation::item:selected { background: @user@; color: @text@; font-weight: 600; }
+QListWidget#settingsNavigation::item:hover:!selected { background: @rail_hover@; }
+QTabWidget::pane { border: 1px solid @line@; border-radius: 10px; background: @surface@; }
+QLineEdit, QPlainTextEdit, QSpinBox { background: @surface@; color: @text@; border: 1px solid @line@; border-radius: 8px; padding: 9px; selection-background-color: @accent@; selection-color: @accent_text@; }
+QLineEdit:focus, QSpinBox:focus { border: 1px solid @accent@; }
+QPushButton#disclosureToggle { text-align: left; background: @background@; font-weight: 600; }
+QPushButton#disclosureToggle:checked { background: @user@; }
+QPushButton#readAllCapture { background: @accent@; color: @accent_text@; }
+QDialogButtonBox QPushButton { min-width: 70px; }
+QWidget#chatHeader, QWidget#chatComposer { background: @dm_panel@; border: 1px solid @dm_line@; border-radius: 12px; }
+QLabel { background: transparent; border: none; }
+QLabel#chatHeading { font-size: 14pt; font-weight: 600; }
+QLabel#chatSubtitle, QLabel#chatStatus, QLabel#chatInputHelp { color: @muted@; font-size: 9pt; }
+QLabel#captureNotice { background: @surface@; color: @text@; border: 1px solid @accent@; padding: 12px 16px; font-weight: 700; }
+QPushButton, QComboBox { background: @surface@; border: 1px solid @line@; border-radius: 8px; padding: 8px 12px; }
+QPushButton:hover, QComboBox:hover { background: @hover@; }
+QPushButton:focus, QComboBox:focus, QPlainTextEdit:focus { border: 1px solid @accent@; }
+QPushButton:disabled { color: @muted@; background: @background@; }
+QPushButton#send { background: @dm_action@; color: @dm_action_text@; border: none; padding: 9px 20px; }
+QPushButton#send:hover { background: @dm_action_hover@; }
+QPushButton#send:disabled { background: @line@; color: @muted@; }
+QComboBox QAbstractItemView { background: @surface@; color: @text@; selection-background-color: @accent@; selection-color: @accent_text@; border: 1px solid @line@; }
+QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: top right; border: none; width: 28px; }
+QComboBox { padding-right: 28px; }
+QComboBox::down-arrow { image: none; width: 0px; height: 0px; }
+QTableWidget { background: @surface@; alternate-background-color: @background@; color: @text@; gridline-color: @line@; border: 1px solid @line@; selection-background-color: @user@; selection-color: @text@; }
+QTableWidget::item { padding: 8px 12px; }
+QTableWidget::item:selected { background: @user@; color: @text@; }
+QHeaderView::section { background: @hover@; color: @text@; border: none; border-bottom: 1px solid @line@; padding: 12px; font-weight: 600; }
+QHeaderView { background: @hover@; color: @text@; }
+QTableCornerButton::section { background: @hover@; border: none; }
+QPlainTextEdit#chatInput { background: @surface@; color: @text@; border: 1px solid @line@; border-radius: 8px; padding: 10px; selection-background-color: @accent@; selection-color: @accent_text@; }
+QScrollArea { border: none; background: @background@; }
+QScrollArea[settingsPanel="true"] { margin: 5px; background: @surface@; }
+QPushButton#saveSettings { background: @accent@; color: @accent_text@; font-weight: 600; }
+QPushButton#saveSettings:hover { background: @accent_hover@; }
+QPushButton#settingsExternalLink { color: @accent@; text-align: left; font-weight: 600; }
+QScrollArea#obsSettingsScroll { margin: 5px; background: @surface@; }
+QLabel#userMessage { background: @dm_outgoing@; color: @dm_outgoing_text@; border-radius: 12px; border-top-right-radius: 3px; padding: 10px 13px; }
+QLabel#assistantMessage { background: @dm_bubble@; border: 1px solid @dm_line@; border-radius: 12px; border-top-left-radius: 3px; padding: 10px 13px; }
+QLabel#chatDate { background: @dm_inbox@; color: @muted@; border: 1px solid @dm_line@; border-radius: 10px; padding: 4px 10px; font-size: 9pt; }
+QLabel#chatMessageMeta { color: @muted@; font-size: 9pt; padding-left: 2px; }
+QLabel#chatRecord, QLabel#chatNotice { background: @dm_record@; border: 1px solid @dm_line@; border-radius: 10px; padding: 11px 13px; }
+QScrollBar:vertical { background: transparent; width: 8px; margin: 0; }
+QScrollBar::handle:vertical { background: @line@; border-radius: 4px; min-height: 24px; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+QScrollBar:horizontal { background: @background@; height: 8px; margin: 0; }
+QScrollBar::handle:horizontal { background: @line@; border-radius: 4px; min-width: 24px; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }

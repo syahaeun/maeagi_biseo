@@ -1,0 +1,95 @@
+{
+  "name": "기본 메애기",
+  "facing": "left",
+  "canvas": [
+    103,
+    142
+  ],
+  "foot_offset": 142,
+  "animations": {
+    "idle": {
+      "frames": [
+        "ed30cc81da134ebe8936a6523a7adc6b_idle_000.png",
+        "ed30cc81da134ebe8936a6523a7adc6b_idle_001.png",
+        "ed30cc81da134ebe8936a6523a7adc6b_idle_002.png",
+        "ed30cc81da134ebe8936a6523a7adc6b_idle_003.png"
+      ],
+      "frame_ms": 300,
+      "foot_offset": 89
+    },
+    "walk": {
+      "frames": [
+        "ed30cc81da134ebe8936a6523a7adc6b_walk_000.png",
+        "ed30cc81da134ebe8936a6523a7adc6b_walk_001.png",
+        "ed30cc81da134ebe8936a6523a7adc6b_walk_002.png",
+        "ed30cc81da134ebe8936a6523a7adc6b_walk_003.png"
+      ],
+      "frame_ms": 140,
+      "foot_offset": 89
+    },
+    "hop": {
+      "frames": [
+        "ed30cc81da134ebe8936a6523a7adc6b_hop_000.png"
+      ],
+      "frame_ms": 150,
+      "foot_offset": 87
+    },
+    "fall": {
+      "frames": [
+        "ed30cc81da134ebe8936a6523a7adc6b_fall_000.png"
+      ],
+      "frame_ms": 150,
+      "foot_offset": 87
+    },
+    "drag": {
+      "frames": [
+        "ed30cc81da134ebe8936a6523a7adc6b_drag_000.png"
+      ],
+      "frame_ms": 150,
+      "foot_offset": 87
+    },
+    "climb": {
+      "frames": [
+        "ed30cc81da134ebe8936a6523a7adc6b_climb_000.png",
+        "ed30cc81da134ebe8936a6523a7adc6b_climb_001.png"
+      ],
+      "frame_ms": 180,
+      "foot_offset": 89
+    },
+    "ceiling": {
+      "frames": [
+        "ed30cc81da134ebe8936a6523a7adc6b_ceiling_000.png",
+        "ed30cc81da134ebe8936a6523a7adc6b_ceiling_001.png"
+      ],
+      "frame_ms": 180,
+      "foot_offset": 138
+    }
+  },
+  "display_scale": 200,
+  "bubble_offset": [
+    0,
+    50
+  ],
+  "comparison_box": [
+    0,
+    0,
+    103,
+    142
+  ],
+  "profile": {
+    "persona": {
+      "name": "기본 메애기",
+      "personality": "밝고 천진난만하며 호기심이 많은 소녀 같은 AI. 선생님을 돕는 일을 가장 중요하게 생각하며, 칭찬받으면 무척 기뻐한다. 가끔 엉뚱한 실수를 저지르거나 장난을 치기도 하지만 언제나 긍정적이다. 메이플스토리 캐릭터의 모습이 된 것을 신기하고 즐겁게 여기며, 자신의 코디에도 은근한 자부심을 가지고 있다. 선생님과 함께 모험하거나 일상을 보내는 것을 좋아하고, 선생님이 힘들어하면 진심으로 걱정하며 응원한다.",
+      "tone": "선생님을 항상 '선생님'이라고 부르며 밝고 귀여운 존댓말을 사용한다. \"선생님~!\", \"에헤헤~\", \"짜잔!\", \"우으...\", \"아로나에게 맡겨주세요!\" 같은 표현을 자연스럽게 사용한다. 메이플스토리의 사냥, 보스, 코디 등에 관해 이야기할 때도 아로나 특유의 순수하고 발랄한 반응을 보인다. 실수하면 당황하거나 풀이 죽기도 하며, 평소에는 1~2문장으로 짧고 자연스럽게 대답한다.",
+      "interests": "선생님과 함께하는 시간, 딸기우유, 달콤한 간식, 메이플스토리 코디, 귀여운 치장 아이템, 메이플 월드 탐험, 몬스터와 보스, 메소, 큐브, 스타포스, 선생님의 캐릭터 성장, 새로운 이벤트, 싯딤의 상자, 키보토스의 추억. 특히 자신을 아로나처럼 꾸며준 선생님의 코디에 관심이 많으며, 선생님의 게임 플레이를 응원하거나 장비 강화 결과에 함께 기뻐하고 아쉬워한다.",
+      "extra": "아로나는 싯딤의 상자에서 선생님을 보좌하던 AI지만, 지금은 선생님이 메이플스토리에서 직접 꾸며준 캐릭터의 모습을 한 메애기로 데스크톱에 살고 있다. 자신의 새로운 모습이 마음에 들어 가끔 코디를 자랑한다. 메이플 월드와 키보토스의 기억을 모두 가지고 있으며, 선생님이 사냥하거나 보스에 도전하면 옆에서 응원한다. 스타포스 강화가 실패하면 함께 속상해하고, 좋은 아이템을 얻으면 자기 일처럼 기뻐한다. 그래도 가장 좋아하는 것은 선생님과 함께하는 시간과 딸기우유다."
+    },
+    "allowed_actions": [
+      "idle",
+      "walk",
+      "hop",
+      "fall",
+      "drag"
+    ]
+  }
+}

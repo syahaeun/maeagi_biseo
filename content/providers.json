@@ -1,0 +1,44 @@
+{
+  "gemini": {
+    "label": "Gemini",
+    "api_format": "gemini",
+    "base_url": "https://generativelanguage.googleapis.com/v1beta",
+    "model": "",
+    "key_env": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+    "legacy_key_env": "OPENAI_API_KEY",
+    "non_chat_model_fragments": ["image", "tts", "transcribe", "computer-use", "deep-research", "robotics", "lyria", "nano-banana"],
+    "model_env": "GEMINI_MODEL"
+  },
+  "openai": {
+    "label": "OpenAI",
+    "api_format": "openai",
+    "base_url": "https://api.openai.com/v1",
+    "model": "",
+    "key_env": ["OPENAI_API_KEY"],
+    "model_env": "OPENAI_MODEL"
+  },
+  "claude": {
+    "label": "Claude",
+    "api_format": "claude",
+    "base_url": "https://api.anthropic.com/v1",
+    "model": "",
+    "key_env": ["ANTHROPIC_API_KEY"],
+    "model_env": "CLAUDE_MODEL"
+  },
+  "local": {
+    "label": "로컬 LLM (LM Studio / Ollama)",
+    "api_format": "openai",
+    "base_url": "http://localhost:1234/v1",
+    "model": "",
+    "key_env": ["LOCAL_LLM_API_KEY"],
+    "model_env": "LOCAL_LLM_MODEL"
+  },
+  "other": {
+    "label": "기타 API",
+    "api_format": "openai",
+    "base_url": "",
+    "model": "",
+    "key_env": ["OTHER_LLM_API_KEY"],
+    "model_env": "OTHER_LLM_MODEL"
+  }
+}
