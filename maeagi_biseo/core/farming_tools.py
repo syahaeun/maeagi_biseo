@@ -3,7 +3,7 @@ from datetime import datetime
 import json
 import sqlite3
 import uuid
-from maeagi_biseo.core.farming import FarmingStore, farming_root, KST
+from maeagi_biseo.core.farming import FarmingStore, farming_root, KST, MAX_BALANCE
 from maeagi_biseo.resources import read_json
 from maeagi_biseo.core.amounts import with_amount_text
 
@@ -37,11 +37,17 @@ class BalanceCapture:
             output = self.output or farming_root() / 'captures' / uuid.uuid4().hex
             for kind, field in (('meso', 'meso'), ('sol_erda', 'fragments')):
                 option = self.options[kind]
-                folder, result = capture(kind, option['region'], 'local', {}, '', output / kind)
+                try:
+                    folder, result = capture(kind, option['region'], 'local', {}, '', output / kind)
+                except (ValueError, OSError, ImportError, RuntimeError):
+                    if kind == 'meso':
+                        raise
+                    continue
                 reading = result.get('reading', {})
-                if reading.get('status') != 'ok' or type(reading.get('value')) is not int or reading['value'] < 0:
-                    label = '메소' if kind == 'meso' else '솔 에르다 조각'
-                    raise ValueError(f'{label} 판독이 확정되지 않아 기록하지 않았습니다. 게임 UI와 인식 설정을 확인해주세요.')
+                if reading.get('status') != 'ok' or type(reading.get('value')) is not int or not 0 <= reading['value'] <= MAX_BALANCE:
+                    if kind == 'meso':
+                        raise ValueError('메소 판독이 확정되지 않았습니다. 게임 UI와 인식 설정을 확인해주세요.')
+                    continue
                 snapshot[field] = reading['value']
                 snapshot['evidence'][kind] = {'folder': str(folder), 'method': 'local', 'mode': result.get('mode')}
             return snapshot
@@ -51,7 +57,7 @@ class BalanceCapture:
 
 
 class FarmingTools:
-    def __init__(self, store=None, reader=None, character_id='', report=None, confirm_start=None):
+    def __init__(self, store=None, reader=None, character_id='', report=None, confirm_start=None, confirm_finish=None):
         self.store = store or FarmingStore()
         self.reader = reader
         self.character_id = character_id
@@ -60,6 +66,7 @@ class FarmingTools:
         self.mutated = None
         self.snapshot = None
         self.confirm_start = confirm_start
+        self.confirm_finish = confirm_finish
         self.definitions = read_json('farming_tools.json')['tools']
 
     def system_context(self):
@@ -70,22 +77,45 @@ class FarmingTools:
         if self.snapshot is None:
             if self.reader is None:
                 raise ValueError('화면 판독 기능이 연결되지 않았습니다.')
-            self.snapshot = self.reader()
-            self.store.validate_snapshot(self.snapshot)
+            snapshot = self.reader()
+            self.store.validate_snapshot(snapshot)
+            self.snapshot = snapshot
         return self.snapshot
+
+    @staticmethod
+    def with_fragment_choice(snapshot, fragments):
+        evidence = dict(snapshot.get('evidence', {}))
+        if fragments is None:
+            evidence.pop('sol_erda', None)
+        elif fragments != snapshot.get('fragments'):
+            evidence['sol_erda'] = {'method': 'manual'}
+        return {**snapshot, 'fragments': fragments, 'evidence': evidence}
 
     def start_confirmed(self, note):
         for _ in range(3):
             snapshot = self.read()
             if self.confirm_start is None:
-                return {'status': 'confirmation_required', 'meso': snapshot['meso'], 'fragments': snapshot['fragments']}
+                return {'status': 'confirmation_required', 'meso': snapshot['meso'], 'fragments': snapshot.get('fragments')}
             choice = self.confirm_start(dict(snapshot))
+            if isinstance(choice, tuple):
+                choice, fragments = choice
+                snapshot = self.with_fragment_choice(snapshot, fragments)
             if choice == 'start':
                 return self.store.start(snapshot, self.character_id, note)
             if choice != 'retry':
                 return {'status': 'start_cancelled'}
             self.snapshot = None
         return {'status': 'error', 'error': '재판독 횟수를 초과했습니다. 다시 시작을 요청해주세요.'}
+
+    def finish_session(self, active):
+        snapshot = self.read()
+        if active['start_fragments'] is not None and snapshot.get('fragments') is None and self.confirm_finish:
+            choice = self.confirm_finish(dict(snapshot))
+            if choice == 'cancel':
+                return {'status': 'finish_cancelled'}
+            _, fragments = choice
+            snapshot = self.with_fragment_choice(snapshot, fragments)
+        return self.store.finish(active['id'], snapshot)
 
     def __call__(self, name, arguments):
         definitions = {definition['name']: definition for definition in self.definitions}
@@ -109,7 +139,7 @@ class FarmingTools:
             self.report({'event': 'running', 'tool': name})
             if name == 'read_farming_balances':
                 snapshot = self.read()
-                result = {'status': 'ok', 'meso': snapshot['meso'], 'fragments': snapshot['fragments'], 'captured_at': snapshot.get('captured_at')}
+                result = {'status': 'ok', 'meso': snapshot['meso'], 'fragments': snapshot.get('fragments'), 'captured_at': snapshot.get('captured_at')}
             elif name == 'get_farming_records':
                 result = self.store.query(**arguments)
             else:
@@ -119,14 +149,14 @@ class FarmingTools:
                 elif not active:
                     result = {'status': 'no_active_session'}
                 elif name == 'finish_farming_session':
-                    result = self.store.finish(active['id'], self.read())
+                    result = self.finish_session(active)
                 else:
                     result = self.store.cancel(active['id'])
                 if result['status'] in ('started', 'completed', 'cancelled'):
                     self.mutated = name
         except ImportError:
             result = {'status': 'error', 'error': '화면 판독 의존성이 없습니다. requirements.txt 설치 상태를 확인해주세요.'}
-        except (ValueError, OSError, sqlite3.Error) as exc:
+        except (ValueError, OSError, RuntimeError, sqlite3.Error) as exc:
             result = {'status': 'error', 'error': str(exc)}
         result = with_amount_text(result)
         self.cache[cache_key] = result

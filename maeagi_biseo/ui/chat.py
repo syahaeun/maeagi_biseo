@@ -25,7 +25,8 @@ from maeagi_biseo.core.sprites import STATES
 from maeagi_biseo.core.character_catalog import registered_characters, preferences, set_default
 from maeagi_biseo.core.character_profiles import PERSONA_FIELDS, load_profiles, persona_for, save_profiles, profile_store
 from copy import deepcopy
-from maeagi_biseo.core.amounts import format_meso
+from maeagi_biseo.core.amounts import format_meso, format_fragments
+from maeagi_biseo.core.farming import MAX_BALANCE
 from PySide6.QtCore import Qt, QEvent, QSize, QSettings, QThread, Signal, QTimer, QSignalBlocker
 from PySide6.QtGui import QIcon, QTextCursor
 from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLayout, QLineEdit, QComboBox, QPlainTextEdit, QPushButton, QTabWidget, QDialogButtonBox, QMessageBox, QScrollArea, QSpinBox, QCheckBox, QGridLayout, QListWidget, QListWidgetItem
@@ -96,7 +97,15 @@ class ReplyWorker(QThread):
             pass
         if self.isInterruptionRequested():
             return 'cancel'
-        request = {'snapshot': snapshot, 'intro': line, 'choice': 'cancel', 'ready': threading.Event()}
+        return self.request_farming_confirmation(snapshot, intro=line)
+
+    def confirm_farming_finish(self, snapshot):
+        return self.request_farming_confirmation(snapshot, finishing=True)
+
+    def request_farming_confirmation(self, snapshot, **details):
+        if self.isInterruptionRequested():
+            return 'cancel'
+        request = {'snapshot': snapshot, 'choice': 'cancel', 'ready': threading.Event(), **details}
         self.confirmation = request
         self.confirmation_requested.emit(request)
         if not request['ready'].wait(300) or self.isInterruptionRequested():
@@ -1466,7 +1475,8 @@ class ChatWindow(QWidget):
         reader = BalanceCapture(capture_options(self.capture_store), before=self.worker.prepare_capture,
                                 after=self.worker.capture_finished.emit)
         self.worker.tool_executor = FarmingTools(store=self.farming_store, reader=reader, character_id=self.thread_id or '', report=self.worker.tool_event.emit,
-                                               confirm_start=self.worker.confirm_farming_start)
+                                               confirm_start=self.worker.confirm_farming_start,
+                                               confirm_finish=self.worker.confirm_farming_finish)
         self.worker.capture_requested.connect(self.prepare_farming_capture)
         self.worker.capture_finished.connect(self.finish_farming_capture)
         self.worker.tool_event.connect(self.farming_tool_event)
@@ -1508,14 +1518,16 @@ class ChatWindow(QWidget):
             if status == 'started':
                 self.farming_reminder_thread = self.thread_id
                 self.farming_reminder.start(FARMING_REMINDER_DELAY_MS)
-                text = tr('farming.started_receipt', meso=format_meso(session['start_meso']), fragments=str(session['start_fragments']))
+                text = tr('farming.started_receipt', meso=format_meso(session['start_meso']), fragments=format_fragments(session['start_fragments']))
             else:
                 text = tr('farming.completed_receipt', minutes=round(session['duration_seconds'] / 60, 1),
-                          meso=format_meso(session['meso_change'], signed=True), fragments=f"{session['fragment_change']:+}")
+                          meso=format_meso(session['meso_change'], signed=True), fragments=format_fragments(session['fragment_change'], signed=True))
         elif status == 'cancelled':
             text = tr('farming.cancelled_receipt')
         elif status == 'start_cancelled':
             text = tr('farming.start_cancelled')
+        elif status == 'finish_cancelled':
+            text = tr('farming.finish_cancelled')
         elif status == 'error':
             text = tr('farming.error_receipt', error=result.get('error', ''))
         else:
@@ -1639,29 +1651,66 @@ class ChatWindow(QWidget):
         if request['ready'].is_set():
             return
         snapshot = request['snapshot']
-        text = tr('farming.confirm_start', intro=request.get('intro', tr('farming.confirm_intro')),
-                  meso=format_meso(snapshot['meso']), fragments=str(snapshot['fragments']))
+        finishing = request.get('finishing', False)
+        recognized = snapshot.get('fragments')
+        fragments = tr('farming.fragments_unread') if recognized is None else format_fragments(recognized)
+        text = tr('farming.confirm_finish' if finishing else 'farming.confirm_start',
+                  intro=request.get('intro', tr('farming.confirm_intro')),
+                  meso=format_meso(snapshot['meso']), fragments=fragments)
         self.add_message(getattr(self, 'reply_name', self.current_config()['name']), text)
         pet = self.target
         if pet is not None:
             self.dialogue.say_to_user(pet, text)
-        dialog = QMessageBox(self)
-        dialog.setWindowTitle(tr('farming.confirm_title'))
-        dialog.setTextFormat(Qt.PlainText)
-        dialog.setText(text)
-        dialog.setIcon(QMessageBox.Question)
-        start = dialog.addButton(tr('farming.confirm_yes'), QMessageBox.AcceptRole)
-        retry = dialog.addButton(tr('farming.confirm_retry'), QMessageBox.ActionRole)
-        cancel = dialog.addButton(tr('common.cancel'), QMessageBox.RejectRole)
-        dialog.setDefaultButton(cancel)
+        dialog = QDialog(self)
+        dialog.setWindowTitle(tr('farming.finish_title' if finishing else 'farming.confirm_title'))
+        layout = QVBoxLayout(dialog)
+        summary = QLabel(text, dialog)
+        summary.setTextFormat(Qt.PlainText)
+        summary.setWordWrap(True)
+        summary.setMinimumWidth(350)
+        layout.addWidget(summary)
+        fragment_input = QLineEdit('' if recognized is None else str(recognized), dialog)
+        fragment_input.setPlaceholderText(tr('farming.fragments_optional'))
+        fragment_input.setAccessibleName(tr('farming.fragments_optional'))
+        fragment_input.setInputMethodHints(Qt.ImhDigitsOnly)
+        layout.addWidget(fragment_input)
+        buttons = QDialogButtonBox(dialog)
+        confirm = buttons.addButton(tr('farming.finish_yes' if finishing else 'farming.confirm_yes'), QDialogButtonBox.AcceptRole)
+        retry = None if finishing else buttons.addButton(tr('farming.confirm_retry'), QDialogButtonBox.ActionRole)
+        cancel = buttons.addButton(tr('common.cancel'), QDialogButtonBox.RejectRole)
+        layout.addWidget(buttons)
+        cancel.setDefault(True)
+        buttons.rejected.connect(dialog.reject)
+
+        def validate(value):
+            confirm.setEnabled(not value or (len(value) <= len(str(MAX_BALANCE))
+                                               and value.isascii() and value.isdecimal()
+                                               and int(value) <= MAX_BALANCE))
+
+        fragment_input.textChanged.connect(validate)
         self.farming_confirmation_dialog = dialog
         timer = QTimer(dialog)
         timer.setSingleShot(True)
         timer.timeout.connect(dialog.reject)
         timer.start(299000)
+
+        def accepted():
+            value = fragment_input.text()
+            count = int(value) if value else None
+            action = 'finish' if finishing else 'start'
+            request['choice'] = 'start' if not finishing and count == recognized else (action, count)
+            dialog.accept()
+
+        def retry_capture():
+            request['choice'] = 'retry'
+            dialog.reject()
+
+        buttons.accepted.connect(accepted)
+        if retry is not None:
+            retry.clicked.connect(retry_capture)
+
         def decided(_):
             timer.stop()
-            request['choice'] = 'start' if dialog.clickedButton() == start else 'retry' if dialog.clickedButton() == retry else 'cancel'
             request['ready'].set()
             self.farming_confirmation_dialog = None
             dialog.deleteLater()

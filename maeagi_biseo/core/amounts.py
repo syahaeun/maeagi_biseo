@@ -14,6 +14,12 @@ def format_meso(value, signed=False):
     return sign + (' '.join(groups) if groups else '0')
 
 
+def format_fragments(value, signed=False):
+    if value is None:
+        return '미기록'
+    return (f'{value:+}' if signed else str(value)) + '개'
+
+
 def with_amount_text(value):
     if isinstance(value, list):
         return [with_amount_text(item) for item in value]

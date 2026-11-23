@@ -5,9 +5,9 @@ from html import escape
 from PySide6.QtCore import Qt, QDate, QLocale, QPoint, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QCalendarWidget, QScrollArea, QFrame, QStyle
-from maeagi_biseo.core.farming import FarmingStore, KST
+from maeagi_biseo.core.farming import FarmingStore, KST, fragment_total
 from maeagi_biseo.resources import tr
-from maeagi_biseo.core.amounts import format_meso
+from maeagi_biseo.core.amounts import format_meso, format_fragments
 from maeagi_biseo.ui.chat_theme import COLORS, appearance_for
 from maeagi_biseo.ui.settings_widgets import Disclosure
 
@@ -261,9 +261,9 @@ class FarmingPanel(QWidget):
             result = self.store.query(since=first.toString(Qt.ISODate), until=last.toString(Qt.ISODate))
             active = result['active']
             text = tr('farming.month_heading', year=first.year(), month=first.month()) + '\n' + tr('farming.history_summary', count=result['completed_sessions'], minutes=round(result['total_seconds'] / 60, 1),
-                      meso=format_meso(result['meso_change'], signed=True), fragments=f"{result['fragment_change']:+}")
+                      meso=format_meso(result['meso_change'], signed=True), fragments=format_fragments(result['fragment_change'], signed=True))
             if active:
-                text += '\n' + tr('farming.active_summary', started=self.display_time(active['started_at']).replace('\n', ' '), meso=format_meso(active['start_meso']), fragments=str(active['start_fragments']))
+                text += '\n' + tr('farming.active_summary', started=self.display_time(active['started_at']).replace('\n', ' '), meso=format_meso(active['start_meso']), fragments=format_fragments(active['start_fragments']))
             self.summary.setText(text)
             self.calendar.days = {}
             for session in result['sessions']:
@@ -284,14 +284,15 @@ class FarmingPanel(QWidget):
         self.day_summary.setText(tr('farming.day_summary', date=day, count=len(sessions),
             minutes=round(sum(row['duration_seconds'] for row in sessions) / 60, 1),
             meso=format_meso(sum(row['meso_change'] for row in sessions), signed=True),
-            fragments=f"{sum(row['fragment_change'] for row in sessions):+}") if sessions else
+            fragments=format_fragments(fragment_total(sessions), signed=True)) if sessions else
             tr('farming.day_empty', date=day))
         self.table.clearSelection()
         self.table.setRowCount(len(sessions))
         for row, session in enumerate(sessions):
             tooltip = self.session_tooltip(session)
             values = [self.display_time(session['started_at']), self.display_time(session['ended_at']), str(round(session['duration_seconds'] / 60, 1)),
-                      format_meso(session['meso_change'], signed=True), f"{session['fragment_change']:+}"]
+                      format_meso(session['meso_change'], signed=True),
+                      '—' if session['fragment_change'] is None else f"{session['fragment_change']:+}"]
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setTextAlignment(Qt.AlignCenter)
@@ -314,8 +315,9 @@ class FarmingPanel(QWidget):
                   hours=hours, minutes=minutes, seconds=seconds,
                   start_meso=format_meso(session['start_meso']), end_meso=format_meso(session['end_meso']),
                   meso_change=format_meso(session['meso_change'], signed=True),
-                  start_fragments=session['start_fragments'], end_fragments=session['end_fragments'],
-                  fragment_change=f"{session['fragment_change']:+}")
+                  start_fragments=format_fragments(session['start_fragments']),
+                  end_fragments=format_fragments(session['end_fragments']),
+                  fragment_change=format_fragments(session['fragment_change'], signed=True))
         if session.get('note'):
             text += '\n\n' + tr('farming.record_note', note=session['note'])
         # Notes are user data, never interpreted as tooltip HTML.

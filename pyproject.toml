@@ -1,6 +1,6 @@
 [project]
 name = "maeagi-biseo"
-version = "1.0.1b1"
+version = "1.1.0"
 description = "Desktop companion with configurable personas and LLM chat"
 requires-python = ">=3.12"
 dependencies = [

@@ -1,7 +1,9 @@
 import os
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 import tempfile
+import sqlite3
 from pathlib import Path
 import unittest
 from unittest.mock import Mock
@@ -53,7 +55,7 @@ class FarmingTests(unittest.TestCase):
         self.assertIsNone(self.store.active())
         session = self.store.start({'meso': 100, 'fragments': 1})['session']
         with self.assertRaises(ValueError):
-            self.store.finish(session['id'], {'meso': 110, 'fragments': None})
+            self.store.finish(session['id'], {'meso': 110, 'fragments': -1})
         self.assertEqual(self.store.active()['start_meso'], 100)
         self.assertEqual(self.store.cancel(session['id'])['status'], 'cancelled')
         self.assertIsNone(self.store.active())
@@ -105,16 +107,45 @@ class FarmingTests(unittest.TestCase):
         self.assertEqual(duplicate('start_farming_session', {})['status'], 'already_active')
         reader.assert_not_called()
 
-    def test_capture_requires_both_readings_and_always_restores_ui(self):
+    def test_capture_allows_missing_fragments_and_always_restores_ui(self):
         options = {kind: {'region': None, 'method': 'local', 'config': {}, 'key': ''} for kind in ('meso', 'sol_erda')}
         before, after = Mock(), Mock()
         capture = Mock(side_effect=[(self.root, {'reading': {'status': 'ok', 'value': 100}}),
                                     (self.root, {'reading': {'status': 'uncertain', 'value': None}})])
         reader = BalanceCapture(options, before, after, self.root, capture)
-        with self.assertRaises(ValueError):
-            reader()
+        snapshot = reader()
+        self.assertEqual(snapshot['meso'], 100)
+        self.assertIsNone(snapshot.get('fragments'))
         before.assert_called_once()
         after.assert_called_once()
+
+    def test_optional_fragments_and_manual_zero(self):
+        reader = Mock(return_value={'meso': 100})
+        start = FarmingTools(self.store, reader, confirm_start=lambda _: 'start')
+        self.assertIsNone(start('start_farming_session', {})['session']['start_fragments'])
+        finish = FarmingTools(self.store, reader, confirm_finish=Mock())
+        self.assertIsNone(finish('finish_farming_session', {})['session']['fragment_change'])
+        finish.confirm_finish.assert_not_called()
+        self.assertIsNone(self.store.query()['fragment_change'])
+
+        start = FarmingTools(self.store, reader, confirm_start=lambda _: ('start', 0))
+        self.assertEqual(start('start_farming_session', {})['session']['start_fragments'], 0)
+        finish = FarmingTools(self.store, reader, confirm_finish=lambda _: ('finish', 3))
+        self.assertEqual(finish('finish_farming_session', {})['session']['fragment_change'], 3)
+        self.assertEqual(self.store.query()['fragment_change'], 3)
+
+    def test_legacy_database_keeps_active_record_and_accepts_missing_fragments(self):
+        with closing(sqlite3.connect(self.store.path)) as db, db:
+            legacy_schema = self.store.SESSION_SCHEMA.replace('start_fragments INTEGER', 'start_fragments INTEGER NOT NULL')
+            db.execute('CREATE TABLE sessions ' + legacy_schema)
+            db.execute("CREATE UNIQUE INDEX one_active_session ON sessions(status) WHERE status = 'active'")
+            db.execute('INSERT INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+                       ('legacy', 'active', 'Lucid', self.now.isoformat(), None, 100, 5, None, None, '{}', None, 'note'))
+        self.assertEqual(self.store.active()['start_fragments'], 5)
+        self.assertEqual(self.store.start({'meso': 200})['status'], 'already_active')
+        self.assertEqual(self.store.finish('legacy', {'meso': 200, 'fragments': 6})['session']['fragment_change'], 1)
+        self.assertIsNone(self.store.start({'meso': 200})['session']['start_fragments'])
+        self.assertEqual(self.store.query()['sessions'][0]['note'], 'note')
 
     def test_capture_ignores_legacy_remote_options(self):
         options = {kind: {'region': None, 'method': 'vision', 'config': {'model': 'old'}, 'key': 'unused'}

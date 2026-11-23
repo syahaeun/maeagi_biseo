@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import Mock, patch
 from PySide6.QtCore import QSettings, Qt, QTimer, QDate, QEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QLabel, QWidget, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialogButtonBox, QLabel, QLineEdit, QWidget, QMessageBox
 from PySide6.QtGui import QFontDatabase
 from maeagi_biseo.core.farming import FarmingStore
 from maeagi_biseo.core.farming_tools import FarmingTools, capture_options
@@ -335,14 +335,15 @@ class FarmingUiTests(unittest.TestCase):
             chat.confirm_farming_start(request)
             self.app.processEvents()
             dialog = chat.farming_confirmation_dialog
-            self.assertIn('4123만 1234 메소', dialog.text())
-            self.assertIn('114개', dialog.text())
-            self.assertTrue(dialog.text().startswith(request['intro']))
+            summary = dialog.findChild(QLabel).text()
+            self.assertIn('4123만 1234 메소', summary)
+            self.assertIn('114개', summary)
+            self.assertTrue(summary.startswith(request['intro']))
             self.assertFalse(request['ready'].is_set())
             self.assertIsNone(self.store.active())
             self.assertFalse(chat.farming_reminder.isActive())
             dialog.grab().save(str(artifact_path('farming_start_confirmation.png')))
-            start_button = next(button for button in dialog.buttons() if button.text() == tr('farming.confirm_yes'))
+            start_button = next(button for button in dialog.findChild(QDialogButtonBox).buttons() if button.text() == tr('farming.confirm_yes'))
             QTest.mouseClick(start_button, Qt.LeftButton)
             self.assertTrue(request['ready'].is_set())
             self.assertEqual(request['choice'], 'start')
@@ -351,10 +352,37 @@ class FarmingUiTests(unittest.TestCase):
                 chat.confirm_farming_start(next_request)
                 self.app.processEvents()
                 dialog = chat.farming_confirmation_dialog
-                button = next(button for button in dialog.buttons() if button.text() == tr(label))
+                button = next(button for button in dialog.findChild(QDialogButtonBox).buttons() if button.text() == tr(label))
                 QTest.mouseClick(button, Qt.LeftButton)
                 self.assertTrue(next_request['ready'].is_set())
                 self.assertEqual(next_request['choice'], choice)
+            for options, initial, value, expected in (
+                ({'fragments': 114}, '114', '', ('start', None)),
+                ({}, '', '0', ('start', 0)),
+                ({}, '', '', 'start'),
+                ({'finishing': True}, '', '32', ('finish', 32)),
+            ):
+                snapshot = {'meso': 41231234}
+                if 'fragments' in options:
+                    snapshot['fragments'] = options['fragments']
+                next_request = {'snapshot': snapshot, 'finishing': options.get('finishing', False),
+                                'choice': 'cancel', 'ready': threading.Event()}
+                chat.confirm_farming_start(next_request)
+                self.app.processEvents()
+                dialog = chat.farming_confirmation_dialog
+                field = dialog.findChild(QLineEdit)
+                self.assertEqual(field.text(), initial)
+                label = 'farming.finish_yes' if next_request['finishing'] else 'farming.confirm_yes'
+                button = next(button for button in dialog.findChild(QDialogButtonBox).buttons() if button.text() == tr(label))
+                field.selectAll()
+                QTest.keyClicks(field, '-1')
+                self.assertFalse(button.isEnabled())
+                field.selectAll()
+                QTest.keyClick(field, Qt.Key_Backspace)
+                QTest.keyClicks(field, value)
+                QTest.mouseClick(button, Qt.LeftButton)
+                self.assertTrue(next_request['ready'].is_set())
+                self.assertEqual(next_request['choice'], expected)
         finally:
             chat.dialogue.timer.stop()
             chat.target_refresh_timer.stop()
