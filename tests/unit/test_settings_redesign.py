@@ -10,9 +10,9 @@ from PySide6.QtCore import QDate, QSettings
 from PySide6.QtGui import QCursor, QFontDatabase, QPixmap
 from PySide6.QtTest import QTest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QTabWidget
+from PySide6.QtWidgets import QApplication, QDialogButtonBox, QTabWidget
 from maeagi_biseo.resources import DEFAULTS, tr
-from maeagi_biseo.ui.chat import SettingsDialog
+from maeagi_biseo.ui.chat import ChatWindow, SettingsDialog
 from maeagi_biseo.ui.chat_theme import apply_chat_theme
 from maeagi_biseo.core.farming import FarmingStore
 from maeagi_biseo.ui.settings_widgets import Disclosure
@@ -34,7 +34,7 @@ class SettingsRedesignTests(unittest.TestCase):
             dialog = SettingsDialog(DEFAULTS, '', capture_store=store, character_store=store, catalog_store=store, farming_store=farming)
             self.addCleanup(dialog.close)
             tabs = dialog.findChild(QTabWidget, 'settingsTabs')
-            self.assertEqual(tabs.count(), 7)
+            self.assertEqual(tabs.count(), 8)
             self.assertEqual(tabs.tabText(tabs.indexOf(dialog.obs_scroll)), tr('obs.settings_tab'))
             self.assertIs(tabs.widget(1), dialog.management_page)
             self.assertGreaterEqual(dialog.preview.minimumHeight(), dialog.preview.fontMetrics().lineSpacing() * 10)
@@ -93,6 +93,111 @@ class SettingsRedesignTests(unittest.TestCase):
                 dialog.reject()
                 self.assertFalse(a.capture_notice.isVisible())
             self.assertFalse(dialog.capture_sequence_timer.isActive())
+
+    def test_lab_saves_and_schedules_chatter_from_one_topic(self):
+        with tempfile.TemporaryDirectory(dir=artifact_path('scratch').parent) as temp:
+            store = QSettings(str(Path(temp) / 'settings.ini'), QSettings.IniFormat)
+            farming = FarmingStore(Path(temp) / 'records.sqlite3')
+            pet = Mock(kind='fixture-pet', broadcast_window=None, paused=False, focus=False)
+            pet.isVisible.return_value = True
+            pet.can_talk.return_value = False
+            dialogue = Mock(store=store, active=None, user_until=0)
+            with patch('maeagi_biseo.ui.chat.load_api_key', return_value=''):
+                chat = ChatWindow([pet], dialogue, store, store, store, farming, store)
+            pet.kind = chat.thread_id
+            try:
+                self.assertFalse(chat.chatter_timer.isActive())
+                chat.settings()
+                dialog = chat._settings_dialog
+                tabs = dialog.findChild(QTabWidget, 'settingsTabs')
+                tabs.setCurrentWidget(dialog.lab_scroll)
+                self.assertEqual(tabs.tabText(tabs.currentIndex()), tr('lab.tab'))
+                self.assertFalse(dialog.chatter_enabled.isChecked())
+                self.assertFalse(dialog.chatter_in_focus.isChecked())
+                self.assertFalse(dialog.chatter_in_focus.isEnabled())
+                self.assertEqual(dialog.chatter_minutes.value(), 30)
+                dialog.chatter_enabled.setChecked(True)
+                self.assertTrue(dialog.chatter_in_focus.isEnabled())
+                dialog.chatter_minutes.setValue(12)
+                dialog.chatter_topics.setText(' 달팽이 퇴근 ; ; 우주 고양이 ;')
+                buttons = dialog.findChild(QDialogButtonBox, 'settingsActions')
+                self.app.processEvents()
+                QTest.mouseClick(buttons.button(QDialogButtonBox.Save), Qt.LeftButton)
+                self.assertIsNone(chat._settings_dialog)
+                self.assertEqual(store.value('chatter_topics'), ' 달팽이 퇴근 ; ; 우주 고양이 ;')
+                self.assertTrue(chat.chatter_timer.isActive())
+                self.assertEqual(chat.chatter_timer.interval(), 12 * 60 * 1000)
+
+                pet.focus = True
+                chat.chatter_timer.timeout.emit()
+                dialogue.say_to_user.assert_not_called()
+                chat.settings()
+                dialog = chat._settings_dialog
+                dialog.findChild(QTabWidget, 'settingsTabs').setCurrentWidget(dialog.lab_scroll)
+                dialog.chatter_in_focus.setChecked(True)
+                buttons = dialog.findChild(QDialogButtonBox, 'settingsActions')
+                self.app.processEvents()
+                QTest.mouseClick(buttons.button(QDialogButtonBox.Save), Qt.LeftButton)
+                self.assertTrue(store.value('chatter_in_focus', False, type=bool))
+
+                with patch('maeagi_biseo.ui.chat.random.choice', side_effect=lambda choices: choices[-1]) as choose:
+                    chat.chatter_timer.timeout.emit()
+                    self.assertEqual(choose.call_args_list[0].args[0], ('달팽이 퇴근', '우주 고양이'))
+                dialogue.say_to_user.assert_called_once_with(
+                    pet, tr('lab.chatter_fallback_question', topic='우주 고양이'))
+                fallback = tr('lab.chatter_fallback_question', topic='우주 고양이')
+                self.assertEqual([entry['text'] for entry in chat.transcripts[pet.kind]], [fallback])
+                self.assertEqual(chat.history[-1], {'role': 'assistant', 'content': fallback})
+                dialogue.say_to_user.reset_mock()
+
+                chat.key = 'fixture-key'
+                config = {**DEFAULTS, 'model': 'fixture-model', 'base_url': 'https://example.com', 'tone': 'Fixture voice'}
+                phrase = '선생님, 우주 고양이한테 달 한 조각만 빌려올까요?'
+                notice = tr('lab.chatter_api_check')
+                for responses, expected in (([phrase], phrase), ([ValueError('offline'), phrase], phrase),
+                                            (['', ValueError('offline')], notice)):
+                    with patch.object(chat, 'config_for', return_value=config) as persona, \
+                         patch('maeagi_biseo.ui.chat.random.choice', side_effect=lambda choices: choices[-1]), \
+                         patch('maeagi_biseo.ui.chat.generate_reply', side_effect=responses) as generate:
+                        chat.chatter_timer.timeout.emit()
+                        for _ in responses:
+                            self.assertTrue(chat.chatter_request[0].wait(2000))
+                            self.app.processEvents()
+                        self.assertIsNone(chat.chatter_request)
+                        self.assertEqual(generate.call_count, len(responses))
+                        persona.assert_called_once_with(pet.kind)
+                        for call in generate.call_args_list:
+                            self.assertIn('Fixture voice', call.args[3])
+                            self.assertIn('우주 고양이', call.args[2][0]['content'])
+                    dialogue.say_to_user.assert_called_once_with(pet, expected)
+                    self.assertEqual(chat.history[-1], {'role': 'assistant', 'content': phrase})
+                    if expected == notice:
+                        self.assertEqual(chat.transcripts[pet.kind][-1]['kind'], 'notice')
+                    dialogue.say_to_user.reset_mock()
+
+                question = '그 고양이는 왜 달에 갔어?'
+                chat.config.update(model=config['model'], base_url=config['base_url'])
+                chat.input.setPlainText(question)
+                with patch('maeagi_biseo.ui.chat.generate_reply', return_value='달에서 낮잠을 자려고요.') as generate:
+                    chat.send_button.click()
+                    self.assertTrue(chat.worker.wait(2000))
+                    self.app.processEvents()
+                    self.assertEqual(generate.call_args.args[2][-2:], [
+                        {'role': 'assistant', 'content': phrase},
+                        {'role': 'user', 'content': question},
+                    ])
+                dialogue.say_to_user.reset_mock()
+
+                dialogue.active = object()
+                chat.chatter_timer.timeout.emit()
+                self.assertIsNone(chat.chatter_request)
+                dialogue.say_to_user.assert_not_called()
+                store.setValue('chatter_topics', ' ; ; ')
+                chat.refresh_idle_chatter()
+                self.assertFalse(chat.chatter_timer.isActive())
+            finally:
+                chat.shutdown()
+                chat.close()
 
     def test_fit_images_reveal_actions_and_history_dates(self):
         with tempfile.TemporaryDirectory(dir=artifact_path('scratch').parent) as temp:

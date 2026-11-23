@@ -1,7 +1,9 @@
 """Chat and provider settings; transport lives in llm.py."""
 from maeagi_biseo.resources import tr, style, DEFAULTS, PRESETS, PERSONAS
 import json
+import random
 import threading
+import time
 from datetime import datetime
 from maeagi_biseo.llm.client import generate_reply, list_models, choose_chat_model
 from maeagi_biseo.llm.settings import PROVIDERS, load_api_key, normalize_config, provider_defaults, key_with_source
@@ -30,6 +32,7 @@ from PySide6.QtWidgets import QApplication, QWidget, QDialog, QVBoxLayout, QHBox
 from maeagi_biseo.ui.choice_combo import ChoiceComboBox as QComboBox
 
 CAPTURE_DELAY_MS = 5000
+FARMING_REMINDER_DELAY_MS = 30 * 60 * 1000
 
 def persona_prompt(config):
     return PERSONAS['prompt_template'].format(**config)
@@ -498,6 +501,34 @@ class SettingsDialog(QDialog):
         self.obs_scroll.setWidgetResizable(True)
         self.obs_scroll.setWidget(self.obs_page)
         tabs.addTab(self.obs_scroll, tr('obs.settings_tab'))
+        self.lab_store = settings_store if settings_store is not None else QSettings('DesktopShimeji', 'Chat')
+        lab = SettingsColumns()
+        lab_card = settings_card()
+        lab.add_panel(lab_card)
+        lab_form = QFormLayout(lab_card)
+        configure_form(lab_form)
+        self.chatter_enabled = QCheckBox(tr('lab.chatter_enabled'))
+        self.chatter_enabled.setChecked(self.lab_store.value('chatter_enabled', False, type=bool))
+        lab_form.addRow(self.chatter_enabled)
+        self.chatter_in_focus = QCheckBox(tr('lab.chatter_in_focus'))
+        self.chatter_in_focus.setChecked(self.lab_store.value('chatter_in_focus', False, type=bool))
+        self.chatter_in_focus.setEnabled(self.chatter_enabled.isChecked())
+        self.chatter_enabled.toggled.connect(self.chatter_in_focus.setEnabled)
+        lab_form.addRow(self.chatter_in_focus)
+        self.chatter_minutes = QSpinBox()
+        self.chatter_minutes.setRange(1, 1440)
+        self.chatter_minutes.setValue(self.lab_store.value('chatter_minutes', 30, type=int))
+        lab_form.addRow(tr('lab.chatter_interval'), self.chatter_minutes)
+        self.chatter_topics = QLineEdit(self.lab_store.value('chatter_topics', '', type=str))
+        self.chatter_topics.setPlaceholderText(tr('lab.chatter_example'))
+        lab_form.addRow(tr('lab.chatter_topics'), self.chatter_topics)
+        lab_help = QLabel(tr('lab.chatter_help'))
+        lab_help.setWordWrap(True)
+        lab_form.addRow(lab_help)
+        self.lab_scroll = QScrollArea()
+        self.lab_scroll.setWidgetResizable(True)
+        self.lab_scroll.setWidget(lab)
+        tabs.addTab(self.lab_scroll, tr('lab.tab'))
         from maeagi_biseo.ui.about import AboutPage
         self.about_page = AboutPage(updates=getattr(parent, 'updates', None))
         self.about_index = tabs.addTab(self.about_page, tr('about.tab'))
@@ -802,6 +833,10 @@ class SettingsDialog(QDialog):
         save_profiles(self.character_profiles, self.character_store)
         if self.startup_character.currentData():
             set_default(self.startup_character.currentData(), store=self.catalog_store)
+        self.lab_store.setValue('chatter_enabled', self.chatter_enabled.isChecked())
+        self.lab_store.setValue('chatter_in_focus', self.chatter_in_focus.isChecked())
+        self.lab_store.setValue('chatter_minutes', self.chatter_minutes.value())
+        self.lab_store.setValue('chatter_topics', self.chatter_topics.text())
         self.accept()
 
 class ChatWindow(QWidget):
@@ -813,6 +848,12 @@ class ChatWindow(QWidget):
         self._settings_dialog = None
         self.character_store = character_store if character_store is not None else profile_store()
         self.farming_store = farming_store
+        self.farming_reminder = QTimer(self)
+        self.farming_reminder.setSingleShot(True)
+        self.farming_reminder.setTimerType(Qt.PreciseTimer)
+        self.farming_reminder.timeout.connect(self.remind_farming_end)
+        self.farming_reminder_thread = None
+        self.farming_reminder_worker = None
         self.capture_store = capture_store if capture_store is not None else QSettings('DesktopShimeji', 'Capture')
         self.catalog_store = catalog_store
         self.store = settings_store if settings_store is not None else QSettings('DesktopShimeji', 'Chat')
@@ -991,6 +1032,12 @@ class ChatWindow(QWidget):
         self.target_refresh_timer.start(700)
         self.refresh_targets()
         self.update_chat_layout()
+        self.chatter_timer = QTimer(self)
+        self.chatter_timer.setTimerType(Qt.PreciseTimer)
+        self.chatter_timer.timeout.connect(self.start_idle_chatter)
+        self.chatter_request = None
+        self.chatter_preferences = None
+        self.refresh_idle_chatter()
 
     def change_theme(self):
         mode = self.theme_selector.currentData()
@@ -1130,7 +1177,9 @@ class ChatWindow(QWidget):
         self.setWindowTitle(tr('chat.title_for', name=name))
 
     def current_config(self):
-        identifier = self.thread_id
+        return self.config_for(self.thread_id)
+
+    def config_for(self, identifier):
         fallback = dict(self.config)
         info = registered_characters(self.catalog_store).get(identifier)
         if info:
@@ -1261,6 +1310,7 @@ class ChatWindow(QWidget):
         self._settings_dialog = dialog
         dialog.setWindowModality(Qt.NonModal)
         dialog.finished.connect(lambda result: self._settings_finished(dialog, result))
+        dialog.accepted.connect(self.refresh_idle_chatter)
         dialog.show()
 
     def open_updates(self, *, check=False):
@@ -1298,11 +1348,15 @@ class ChatWindow(QWidget):
                 if action == 'chat':
                     self.open_for(identifier=identifier)
     def add_message(self, speaker, text, user=False, *, kind=None):
-        identifier = self.thread_id
-        entry = dict(speaker=speaker, text=text, kind=kind or ('user' if user else 'assistant'), time=datetime.now())
+        self.add_thread_message(self.thread_id, speaker, text, kind or ('user' if user else 'assistant'))
+
+    def add_thread_message(self, identifier, speaker, text, kind):
+        current = identifier == self.thread_id
+        entry = dict(speaker=speaker, text=text, kind=kind, time=datetime.now())
         self.transcripts.setdefault(identifier, []).append(entry)
-        self.render_entry(entry)
-        if entry['kind'] == 'assistant' and identifier and (self.isMinimized() or not self.isActiveWindow()):
+        if current:
+            self.render_entry(entry)
+        if kind == 'assistant' and identifier and (not current or not self.isVisible() or self.isMinimized() or not self.isActiveWindow()):
             self.unread[identifier] = self.unread.get(identifier, 0) + 1
         self.prioritize_contact(identifier)
         self.refresh_contact(identifier)
@@ -1445,9 +1499,15 @@ class ChatWindow(QWidget):
             return
         result = event['result']
         status = result.get('status')
+        if status in ('completed', 'cancelled'):
+            self.farming_reminder.stop()
+            self.farming_reminder_thread = None
+            self.farming_reminder_worker = None
         if status in ('started', 'completed'):
             session = result['session']
             if status == 'started':
+                self.farming_reminder_thread = self.thread_id
+                self.farming_reminder.start(FARMING_REMINDER_DELAY_MS)
                 text = tr('farming.started_receipt', meso=format_meso(session['start_meso']), fragments=str(session['start_fragments']))
             else:
                 text = tr('farming.completed_receipt', minutes=round(session['duration_seconds'] / 60, 1),
@@ -1462,6 +1522,118 @@ class ChatWindow(QWidget):
             return
         # A local receipt remains visible even if the following LLM request fails.
         self.add_message(tr('farming.system'), text, kind='record')
+
+    def remind_farming_end(self):
+        identifier = self.farming_reminder_thread
+        config = self.config_for(identifier)
+        if not (self.key and config['base_url'] and config['model']):
+            self.show_farming_reminder(tr('farming.end_reminder'))
+            return
+        worker = ReplyWorker({**config, 'timeout_seconds': 5}, self.key,
+                             [{'role': 'user', 'content': tr('farming.reminder_persona_request')}], self)
+        self.farming_reminder_worker = worker
+        worker.result.connect(self.farming_reminder_generated)
+        worker.error.connect(self.farming_reminder_failed)
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
+
+    def farming_reminder_generated(self, answer):
+        if self.sender() is self.farming_reminder_worker:
+            text = ' '.join(answer.split())
+            self.show_farming_reminder(text if 0 < len(text) <= 100 else tr('farming.end_reminder'))
+
+    def farming_reminder_failed(self, _error):
+        if self.sender() is self.farming_reminder_worker:
+            self.show_farming_reminder(tr('farming.end_reminder'))
+
+    def show_farming_reminder(self, text):
+        identifier = self.farming_reminder_thread
+        speaker = self.config_for(identifier)['name']
+        self.farming_reminder_thread = None
+        self.farming_reminder_worker = None
+        self.add_thread_message(identifier, speaker, text, 'assistant')
+        pet = next((pet for pet in self.pets if pet.kind == identifier and pet.isVisible()), None)
+        if pet is not None:
+            self.dialogue.say_to_user(pet, text)
+
+    def refresh_idle_chatter(self):
+        enabled = self.store.value('chatter_enabled', False, type=bool)
+        self.chatter_in_focus = self.store.value('chatter_in_focus', False, type=bool)
+        minutes = max(1, min(1440, self.store.value('chatter_minutes', 30, type=int)))
+        raw_topics = self.store.value('chatter_topics', '', type=str)
+        topics = tuple(dict.fromkeys(topic.strip() for topic in raw_topics.split(';') if topic.strip()))
+        preferences = (enabled, minutes, topics)
+        if preferences == self.chatter_preferences:
+            return
+        self.chatter_preferences = preferences
+        self.chatter_request = None
+        self.chatter_timer.stop()
+        if enabled and topics:
+            self.chatter_timer.start(minutes * 60 * 1000)
+
+    def can_show_idle_chatter(self):
+        return (self.worker is None and self.farming_reminder_worker is None
+                and self.farming_reminder.remainingTime() != 0
+                and self.dialogue.active is None and time.monotonic() >= self.dialogue.user_until)
+
+    def idle_chatter_pet_available(self, pet):
+        # The lab toggle controls these messages independently of pet-to-pet dialogue actions.
+        return pet.isVisible() and not pet.paused and (not pet.focus or self.chatter_in_focus)
+
+    def start_idle_chatter(self):
+        enabled, _, topics = self.chatter_preferences
+        if not enabled or not topics or self.chatter_request or not self.can_show_idle_chatter():
+            return
+        pets = [pet for pet in self.pets if self.idle_chatter_pet_available(pet)]
+        if not pets:
+            return
+        pet = self.target if self.target in pets else pets[0]
+        topic = random.choice(topics)
+        config = self.config_for(pet.kind)
+        if not (self.key and config['base_url'] and config['model']):
+            fallback = tr(random.choice(('lab.chatter_fallback_imagine', 'lab.chatter_fallback_question')), topic=topic)
+            self.show_idle_chatter(pet, config['name'], fallback)
+            return
+        messages = [{'role': 'user', 'content': tr('lab.chatter_prompt', topic=topic)}]
+        self.request_idle_chatter(pet, {**config, 'timeout_seconds': 5}, self.key, messages, attempt=1)
+
+    def request_idle_chatter(self, pet, config, key, messages, *, attempt):
+        worker = ReplyWorker(config, key, messages, self)
+        self.chatter_request = (worker, pet, attempt)
+        worker.result.connect(self.finish_idle_chatter)
+        worker.error.connect(self.idle_chatter_failed)
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
+
+    def idle_chatter_failed(self, _error):
+        self.finish_idle_chatter('')
+
+    def finish_idle_chatter(self, answer):
+        if self.chatter_request is None or self.sender() is not self.chatter_request[0]:
+            return
+        worker, pet, attempt = self.chatter_request
+        self.chatter_request = None
+        if pet not in self.pets:
+            return
+        text = ' '.join(answer.split())
+        if 0 < len(text) <= 100:
+            if self.idle_chatter_pet_available(pet) and self.can_show_idle_chatter():
+                self.show_idle_chatter(pet, worker.config['name'], text)
+        elif attempt == 1:
+            self.request_idle_chatter(pet, worker.config, worker.key, worker.messages, attempt=2)
+        else:
+            notice = tr('lab.chatter_api_check')
+            self.add_thread_message(pet.kind, tr('chat.error_title'), notice, 'notice')
+            if self.idle_chatter_pet_available(pet) and self.can_show_idle_chatter():
+                self.dialogue.say_to_user(pet, notice)
+
+    def show_idle_chatter(self, pet, speaker, text):
+        identifier = pet.kind
+        history = self.history if identifier == self.thread_id else self.histories.setdefault(identifier, [])
+        # Keep the spontaneous turn in the model context without displaying a user message.
+        history.extend([dict(role='user', content=tr('lab.chatter_context')), dict(role='assistant', content=text)])
+        self.add_thread_message(identifier, speaker, text, 'assistant')
+        self.dialogue.say_to_user(pet, text)
 
     def confirm_farming_start(self, request):
         if request['ready'].is_set():
@@ -1517,6 +1689,10 @@ class ChatWindow(QWidget):
         self.set_busy(False)
 
     def shutdown(self):
+        self.chatter_timer.stop()
+        self.chatter_request = None
+        self.farming_reminder.stop()
+        self.farming_reminder_worker = None
         self.capture_notice.stop()
         if self.worker:
             self.worker.cancel_pending_capture()

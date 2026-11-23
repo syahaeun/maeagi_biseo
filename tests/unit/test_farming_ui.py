@@ -340,6 +340,7 @@ class FarmingUiTests(unittest.TestCase):
             self.assertTrue(dialog.text().startswith(request['intro']))
             self.assertFalse(request['ready'].is_set())
             self.assertIsNone(self.store.active())
+            self.assertFalse(chat.farming_reminder.isActive())
             dialog.grab().save(str(artifact_path('farming_start_confirmation.png')))
             start_button = next(button for button in dialog.buttons() if button.text() == tr('farming.confirm_yes'))
             QTest.mouseClick(start_button, Qt.LeftButton)
@@ -358,6 +359,62 @@ class FarmingUiTests(unittest.TestCase):
             chat.dialogue.timer.stop()
             chat.target_refresh_timer.stop()
             chat.close()
+
+    def test_farming_reminder_stays_in_original_chat_and_keeps_session_active(self):
+        chat = ChatWindow([], DialogueManager([]), self.settings, self.settings, self.settings, self.store, self.settings)
+        chat.key = ''
+        identifier = chat.thread_id
+        snapshot = {'meso': 100, 'fragments': 10}
+        tool = FarmingTools(self.store, lambda: snapshot, identifier, chat.farming_tool_event,
+                            confirm_start=lambda _: 'start')
+        result = tool('start_farming_session', {})
+        self.assertEqual(result['status'], 'started')
+        self.assertEqual(chat.farming_reminder.interval(), 30 * 60 * 1000)
+        self.assertTrue(chat.farming_reminder.isActive())
+
+        chat.thread_id = 'other-character'
+        chat.farming_reminder.start(1)
+        QTest.qWait(30)
+        self.assertFalse(chat.farming_reminder.isActive())
+        self.assertEqual(chat.transcripts[identifier][-1]['text'], tr('farming.end_reminder'))
+        self.assertNotIn(chat.thread_id, chat.transcripts)
+        self.assertEqual(self.store.active()['id'], result['session']['id'])
+
+    def test_farming_reminder_uses_original_persona_and_falls_back_on_error(self):
+        chat = ChatWindow([], DialogueManager([]), self.settings, self.settings, self.settings, self.store, self.settings)
+        chat.key = 'fixture-key'
+        chat.thread_id = 'other-character'
+        config = {**DEFAULTS, 'name': 'Original Pet', 'tone': 'Original voice',
+                  'model': 'fixture-model', 'base_url': 'https://example.com'}
+        phrase = '선생님, 벌써 30분이에요! 재획이 끝났는지 봐주실래요?'
+        for response, error, expected in ((phrase, None, phrase), ('', None, tr('farming.end_reminder')),
+                                          (None, ValueError('offline'), tr('farming.end_reminder'))):
+            with self.subTest(response=response, error=error):
+                chat.farming_reminder_thread = 'original-character'
+                with patch.object(chat, 'config_for', return_value=config) as persona, \
+                     patch('maeagi_biseo.ui.chat.generate_reply', return_value=response, side_effect=error) as generate:
+                    chat.remind_farming_end()
+                    self.assertTrue(chat.farming_reminder_worker.wait(2000))
+                    self.app.processEvents()
+                    persona.assert_called_with('original-character')
+                    self.assertIn('Original voice', generate.call_args.args[3])
+                    self.assertEqual(generate.call_args.args[2][0]['content'], tr('farming.reminder_persona_request'))
+                entry = chat.transcripts['original-character'][-1]
+                self.assertEqual(entry['speaker'], 'Original Pet')
+                self.assertEqual(entry['text'], expected)
+
+    def test_farming_reminder_stops_after_early_finish_or_cancel(self):
+        chat = ChatWindow([], DialogueManager([]), self.settings, self.settings, self.settings, self.store, self.settings)
+        snapshot = {'meso': 100, 'fragments': 10}
+        for action, status in (('finish_farming_session', 'completed'), ('cancel_farming_session', 'cancelled')):
+            with self.subTest(action=action):
+                start = FarmingTools(self.store, lambda: snapshot, report=chat.farming_tool_event,
+                                     confirm_start=lambda _: 'start')
+                start('start_farming_session', {})
+                self.assertTrue(chat.farming_reminder.isActive())
+                stop = FarmingTools(self.store, lambda: snapshot, report=chat.farming_tool_event)
+                self.assertEqual(stop(action, {})['status'], status)
+                self.assertFalse(chat.farming_reminder.isActive())
 
     def test_farming_confirmation_uses_persona_without_sending_snapshot(self):
         worker = ReplyWorker({**DEFAULTS, 'name': 'Test Pet', 'tone': 'Custom voice'}, 'fixture-key', [])
